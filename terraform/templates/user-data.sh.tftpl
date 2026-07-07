@@ -1,0 +1,166 @@
+#!/bin/bash
+set -euxo pipefail
+
+cat >/etc/sysctl.d/99-sonarqube.conf <<'EOF'
+vm.max_map_count=524288
+fs.file-max=131072
+EOF
+sysctl --system
+
+cat >/etc/security/limits.d/99-sonarqube.conf <<'EOF'
+*   soft   nofile   131072
+*   hard   nofile   131072
+*   soft   nproc    8192
+*   hard   nproc    8192
+EOF
+
+DEVICE=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${volume_id_nodash}
+for _ in $(seq 1 60); do
+  [ -e "$DEVICE" ] && break
+  sleep 5
+done
+[ -e "$DEVICE" ]
+
+if ! blkid "$DEVICE" >/dev/null 2>&1; then
+  mkfs.xfs "$DEVICE"
+fi
+
+mkdir -p /var/lib/docker
+FS_UUID=$(blkid -s UUID -o value "$DEVICE")
+if ! grep -q "$FS_UUID" /etc/fstab; then
+  echo "UUID=$FS_UUID /var/lib/docker xfs defaults,nofail 0 2" >>/etc/fstab
+fi
+mount -a
+
+dnf update -y
+dnf install -y docker
+systemctl enable --now docker
+
+COMPOSE_ARCH=$(uname -m)
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL "https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-linux-$COMPOSE_ARCH" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+install -d -m 755 /opt/sonarqube /opt/sonarqube/bin
+install -d -m 700 /opt/sonarqube/backups
+
+cat >/opt/sonarqube/docker-compose.yml <<'COMPOSE_EOF'
+${chomp(compose_file)}
+COMPOSE_EOF
+
+cat >/opt/sonarqube/Caddyfile <<'CADDY_EOF'
+${chomp(caddyfile)}
+CADDY_EOF
+
+cat >/opt/sonarqube/bin/render-env.sh <<'RENDER_EOF'
+#!/bin/bash
+set -euo pipefail
+umask 077
+DB_PASSWORD=$(aws ssm get-parameter --region ${region} --name "${ssm_parameter}" --with-decryption --query Parameter.Value --output text)
+cat >/opt/sonarqube/.env <<ENV_EOF
+SONAR_DB_USER=${db_user}
+SONAR_DB_NAME=${db_name}
+SONAR_DB_PASSWORD=$DB_PASSWORD
+SONAR_DOMAIN=${domain}
+ACME_EMAIL=${acme_email}
+SONAR_IMAGE=${sonarqube_image}
+%{ for k, v in extra_env ~}
+${k}=${v}
+%{ endfor ~}
+ENV_EOF
+chmod 600 /opt/sonarqube/.env
+RENDER_EOF
+chmod +x /opt/sonarqube/bin/render-env.sh
+
+cat >/opt/sonarqube/bin/backup.sh <<'BACKUP_EOF'
+#!/bin/bash
+set -euo pipefail
+cd /opt/sonarqube
+set -a
+source ./.env
+set +a
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+DUMP=/opt/sonarqube/backups/sonar-$TIMESTAMP.dump
+docker compose exec -T db pg_dump -U "$SONAR_DB_USER" -Fc "$SONAR_DB_NAME" >"$DUMP"
+%{ if backup_bucket != "" ~}
+aws s3 cp "$DUMP" "s3://${backup_bucket}/pg_dump/" --only-show-errors
+%{ endif ~}
+find /opt/sonarqube/backups -name '*.dump' -mtime +3 -delete
+BACKUP_EOF
+chmod +x /opt/sonarqube/bin/backup.sh
+
+cat >/etc/systemd/system/sonarqube.service <<'UNIT_EOF'
+[Unit]
+Description=SonarQube stack
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/sonarqube
+ExecStartPre=/opt/sonarqube/bin/render-env.sh
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose stop
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target
+UNIT_EOF
+
+cat >/etc/systemd/system/sonarqube-backup.service <<'UNIT_EOF'
+[Unit]
+Description=SonarQube database backup
+After=sonarqube.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/sonarqube/bin/backup.sh
+UNIT_EOF
+
+cat >/etc/systemd/system/sonarqube-backup.timer <<'UNIT_EOF'
+[Unit]
+Description=Daily SonarQube database backup
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target
+UNIT_EOF
+
+%{ if enable_cw_agent ~}
+dnf install -y amazon-cloudwatch-agent
+cat >/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CW_EOF'
+{
+  "agent": {
+    "omit_hostname": true
+  },
+  "metrics": {
+    "namespace": "CWAgent",
+    "append_dimensions": {
+      "InstanceId": "$${aws:InstanceId}"
+    },
+    "metrics_collected": {
+      "disk": {
+        "measurement": ["used_percent"],
+        "resources": ["/", "/var/lib/docker"],
+        "drop_device": true
+      },
+      "mem": {
+        "measurement": ["mem_used_percent"]
+      }
+    }
+  }
+}
+CW_EOF
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+%{ endif ~}
+
+systemctl daemon-reload
+systemctl enable --now sonarqube.service
+systemctl enable --now sonarqube-backup.timer

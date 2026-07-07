@@ -1,0 +1,19 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$SONAR_DOMAIN} {
+	reverse_proxy sonarqube:9000
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

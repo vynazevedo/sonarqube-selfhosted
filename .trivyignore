@@ -1,0 +1,12 @@
+# Intentional: SonarQube is a public web service, 80/443 open to allowed_cidrs
+# (default 0.0.0.0/0) and unrestricted egress for image pulls, dnf and ACME.
+AVD-AWS-0107
+AVD-AWS-0104
+
+# Backup bucket uses SSE-S3. A customer managed KMS key is out of scope for
+# the default deployment and would add cost for no threat-model benefit here.
+AVD-AWS-0132
+
+# Intentional in the complete example: the instance needs a public IP at launch
+# for egress (dnf, image pulls) before the EIP association is applied.
+AVD-AWS-0164

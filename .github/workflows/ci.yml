@@ -13,8 +13,8 @@ jobs:
     name: Terraform fmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
       - run: terraform fmt -check -recursive
 
   validate:
@@ -27,8 +27,8 @@ jobs:
           - terraform/examples/complete
           - terraform/examples/existing-vpc
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
       - run: terraform -chdir=${{ matrix.dir }} init -backend=false
       - run: terraform -chdir=${{ matrix.dir }} validate
 
@@ -36,8 +36,8 @@ jobs:
     name: TFLint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: terraform-linters/setup-tflint@v4
+      - uses: actions/checkout@v7
+      - uses: terraform-linters/setup-tflint@v6
       - run: tflint --init
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -47,8 +47,8 @@ jobs:
     name: Trivy config scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: aquasecurity/trivy-action@0.28.0
+      - uses: actions/checkout@v7
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
           scan-ref: .
@@ -60,7 +60,7 @@ jobs:
     name: Compose config
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: |
           cat > docker/.env <<'EOF'
           SONAR_DB_USER=sonar
@@ -75,14 +75,14 @@ jobs:
     name: ShellCheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: shellcheck scripts/*.sh
 
   markdownlint:
     name: Markdown lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: DavidAnson/markdownlint-cli2-action@v17
+      - uses: actions/checkout@v7
+      - uses: DavidAnson/markdownlint-cli2-action@v24
         with:
           globs: "**/*.md"

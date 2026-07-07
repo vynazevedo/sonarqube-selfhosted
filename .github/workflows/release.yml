@@ -12,7 +12,7 @@ jobs:
     name: GitHub Release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Extract changelog entry
         run: |
           awk -v version="${GITHUB_REF_NAME#v}" '
@@ -23,6 +23,6 @@ jobs:
           if [ ! -s RELEASE_NOTES.md ]; then
             echo "No changelog entry found for $GITHUB_REF_NAME" > RELEASE_NOTES.md
           fi
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           body_path: RELEASE_NOTES.md

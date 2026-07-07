@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-07
+
 ### Added
 
 - Terraform module provisioning a production-ready SonarQube Community Build on a single EC2 instance: Graviton by default, IMDSv2 required, encrypted volumes, no SSH (SSM Session Manager only).

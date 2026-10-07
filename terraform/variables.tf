@@ -116,7 +116,7 @@ variable "alarm_actions" {
 variable "sonarqube_image" {
   description = "SonarQube container image. Pin to an exact patch release in production"
   type        = string
-  default     = "sonarqube:2026-lta-community"
+  default     = "sonarqube:26.9.0.129388-community"
 }
 
 variable "db_user" {

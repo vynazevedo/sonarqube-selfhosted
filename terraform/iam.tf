@@ -67,3 +67,25 @@ resource "aws_iam_role_policy" "backup" {
   role   = aws_iam_role.instance.id
   policy = data.aws_iam_policy_document.backup[0].json
 }
+
+data "aws_iam_policy_document" "health_metrics" {
+  count = var.enable_cloudwatch_alarms ? 1 : 0
+
+  statement {
+    actions   = ["cloudwatch:PutMetricData"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "cloudwatch:namespace"
+      values   = ["SonarQube"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "health_metrics" {
+  count = var.enable_cloudwatch_alarms ? 1 : 0
+
+  name   = "health-metrics"
+  role   = aws_iam_role.instance.id
+  policy = data.aws_iam_policy_document.health_metrics[0].json
+}

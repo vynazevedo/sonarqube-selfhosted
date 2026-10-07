@@ -86,3 +86,44 @@ jobs:
       - uses: DavidAnson/markdownlint-cli2-action@v24
         with:
           globs: "**/*.md"
+
+  operations:
+    name: Backup and bootstrap regression checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+      - run: terraform -chdir=terraform init -backend=false
+      - run: python3 -m unittest discover -s tests -v
+      - run: python3 tests/validate_user_data.py
+
+  smoke:
+    name: Container startup and database restore
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SONAR_DB_USER: sonar
+      SONAR_DB_NAME: sonar
+      SONAR_DB_PASSWORD: ci-only
+      SONAR_DOMAIN: sonar.example.com
+      ACME_EMAIL: ci@example.com
+      STACK_DIR: ${{ github.workspace }}/docker
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare host and start database and SonarQube
+        run: |
+          sudo sysctl -w vm.max_map_count=524288 fs.file-max=131072
+          docker compose -f docker/docker-compose.yml up -d --wait --wait-timeout 600 db sonarqube
+      - name: Back up and restore the running database
+        env:
+          BACKUP_DIR: ${{ runner.temp }}/sonarqube-backups
+        run: |
+          bash scripts/backup.sh
+          bash scripts/restore.sh "$BACKUP_DIR"/*.dump
+          docker compose -f docker/docker-compose.yml up -d --wait --wait-timeout 600 db sonarqube
+      - name: Show container logs
+        if: failure()
+        run: docker compose -f docker/docker-compose.yml logs --tail=200
+      - name: Clean up CI containers
+        if: always()
+        run: docker compose -f docker/docker-compose.yml down -v

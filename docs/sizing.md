@@ -25,7 +25,7 @@ extra_env = {
 
 Compose-only deployments set the same variables in `.env`.
 
-Changing `instance_type` replaces the instance; data survives on the data volume (see [architecture](architecture.md)).
+Changing `instance_type` generally stops and starts the instance; review the plan. Data survives on the data volume (see [architecture](architecture.md)).
 
 ## Disk growth
 
@@ -37,7 +37,9 @@ Elasticsearch indexes and analysis reports grow with project count and history. 
 | --- | --- |
 | t4g.large | ~USD 49 |
 | 30 GB root + 50 GB data gp3 | ~USD 7 |
-| Elastic IP (attached), SSM, DLM | ~USD 0 |
+| One public IPv4 address | ~USD 3.65 (730 hours at USD 0.005/hour) |
 | S3 backups, snapshots | usually < USD 5 |
 
 A 1-year no-upfront compute savings plan cuts the instance cost by roughly 30 percent.
+
+These are estimates, not a quote. Recalculate EC2, EBS, snapshots, S3, CloudWatch, public IPv4, traffic and possible burst CPU charges in the target region. See [AWS public IPv4 pricing](https://aws.amazon.com/vpc/pricing/).

@@ -59,3 +59,25 @@ resource "aws_cloudwatch_metric_alarm" "disk" {
     fstype     = "xfs"
   }
 }
+
+resource "aws_cloudwatch_metric_alarm" "health" {
+  for_each = var.enable_cloudwatch_alarms ? toset(["ApplicationHealthy", "BackupHealthy"]) : toset([])
+
+  alarm_name          = "${var.name}-${each.key}"
+  alarm_description   = each.key == "BackupHealthy" ? "No successful backup in 26 hours (including S3 upload when enabled)" : "SonarQube HTTPS status endpoint is unavailable or not UP"
+  namespace           = "SonarQube"
+  metric_name         = each.key
+  comparison_operator = "LessThanThreshold"
+  threshold           = 1
+  evaluation_periods  = 3
+  period              = 300
+  statistic           = "Minimum"
+  treat_missing_data  = "breaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+  tags                = var.tags
+
+  dimensions = {
+    Deployment = var.name
+  }
+}

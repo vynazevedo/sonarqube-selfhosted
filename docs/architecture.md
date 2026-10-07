@@ -32,7 +32,7 @@ There is no SSH. The security group has no port 22 and the module creates no key
 aws ssm start-session --target <instance-id>
 ```
 
-IMDSv2 is required, protecting the instance role credentials from SSRF-style attacks.
+IMDSv2 is required, reducing exposure to some SSRF attacks; it does not isolate instance credentials from arbitrary code running on the host.
 
 ## Secret flow
 
@@ -49,10 +49,10 @@ A dedicated EBS volume is attached and mounted at `/var/lib/docker`, where all D
 
 Consequences:
 
-- Replacing the instance (AMI update, user data change, instance type change) keeps all state. The new instance mounts the existing volume, finds the existing filesystem (`mkfs` is guarded by a `blkid` check) and the stack comes back with all projects, users and certificates.
+- Replacing the instance (AMI update, user data change, changes requiring replacement) keeps all state. The new instance mounts the existing volume, finds the existing filesystem (`mkfs` is guarded by a `blkid` check) and the stack comes back with all projects, users and certificates.
 - The Elastic IP is a separate resource, so DNS never changes across replacements.
 - DLM snapshots this single volume daily.
 
 ## Boot orchestration
 
-cloud-init runs the user data once: kernel settings required by the embedded Elasticsearch (`vm.max_map_count`), volume mount, Docker install, file rendering and systemd unit installation. From then on `sonarqube.service` owns the lifecycle: it re-renders `.env` from SSM on every start and runs `docker compose up -d`. A systemd timer runs the daily database backup, scheduled one hour before the DLM snapshot so each snapshot contains the latest dump.
+cloud-init runs the user data once: kernel settings required by the embedded Elasticsearch (`vm.max_map_count`), volume mount, Docker install, file rendering and systemd unit installation. From then on `sonarqube.service` owns the lifecycle: it re-renders `.env` from SSM on every start and runs `docker compose up -d`. A systemd timer runs the daily database backup, scheduled one hour before DLM. Completed dumps are stored on the data volume; only dumps completed before a snapshot are included. Docker requires that volume to be mounted before starting. The service waits for container health during startup.

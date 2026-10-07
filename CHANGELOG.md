@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- Disable the Terraform wrapper for piped console regression checks and bound subprocess/job runtime to prevent CI hangs.
 - Replace the nonexistent Community image tag with 26.9.0.129388-community and update PostgreSQL/Caddy patch releases; use curl for the SonarQube health check.
 - Require the data mount before Docker starts and wait for container health at initial startup.
 - Store AWS logical backups on the snapshotted volume, avoid sourcing dotenv as shell code, reject concurrent backups and record success only after upload.

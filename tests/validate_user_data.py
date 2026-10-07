@@ -22,8 +22,10 @@ for monitoring in (False, True):
     # jsondecode prevents Terraform from interpreting shell ${...} as HCL templates.
     encoded = json.dumps(json.dumps(values)).replace("${", "$${").replace("%{", "%%{")
     expression = 'jsonencode(templatefile("templates/user-data.sh.tftpl", jsondecode(' + encoded + ')))'
+    print(f"Rendering cloud-init (monitoring={monitoring})", flush=True)
     result = subprocess.run(["terraform", "console", "-no-color"], cwd=ROOT / "terraform",
-                            input=expression, text=True, capture_output=True, check=True)
+                            input=expression + "\n", text=True, capture_output=True,
+                            check=True, timeout=120)
     rendered = json.loads(json.loads(result.stdout))
     assert len(rendered.encode()) < 16384, "EC2 user data exceeds 16 KiB"
     subprocess.run(["bash", "-n"], input=rendered, text=True, check=True)

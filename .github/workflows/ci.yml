@@ -90,12 +90,17 @@ jobs:
   operations:
     name: Backup and bootstrap regression checks
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: hashicorp/setup-terraform@v4
-      - run: terraform -chdir=terraform init -backend=false
+        with:
+          # The Python renderer pipes expressions to console and parses stdout.
+          terraform_wrapper: false
+      - run: terraform -chdir=terraform init -backend=false -input=false
       - run: python3 -m unittest discover -s tests -v
-      - run: python3 tests/validate_user_data.py
+      - run: python3 -u tests/validate_user_data.py
+        timeout-minutes: 5
 
   smoke:
     name: Container startup and database restore

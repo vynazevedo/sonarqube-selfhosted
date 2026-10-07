@@ -1,0 +1,4 @@
+# Copy to backend.tf before terraform init. Requires Terraform >= 1.10.
+terraform {
+  backend "s3" {}
+}

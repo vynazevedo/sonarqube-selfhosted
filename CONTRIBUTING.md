@@ -16,6 +16,8 @@ terraform -chdir=terraform/examples/existing-vpc init -backend=false && terrafor
 tflint --init && tflint --chdir=terraform --config "$(pwd)/.tflint.hcl"
 trivy config --severity HIGH,CRITICAL --ignorefile .trivyignore .
 shellcheck scripts/*.sh
+python3 -m unittest discover -s tests -v
+python3 tests/validate_user_data.py
 ```
 
 ## Pull requests

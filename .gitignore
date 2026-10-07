@@ -14,3 +14,6 @@ crash.*.log
 .DS_Store
 Thumbs.db
 *.log
+
+backend.hcl
+__pycache__/

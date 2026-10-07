@@ -28,12 +28,22 @@ fi
 mkdir -p /var/lib/docker
 FS_UUID=$(blkid -s UUID -o value "$DEVICE")
 if ! grep -q "$FS_UUID" /etc/fstab; then
-  echo "UUID=$FS_UUID /var/lib/docker xfs defaults,nofail 0 2" >>/etc/fstab
+  echo "UUID=$FS_UUID /var/lib/docker xfs defaults 0 2" >>/etc/fstab
 fi
-mount -a
+mount /var/lib/docker
+mountpoint -q /var/lib/docker
 
 dnf update -y
 dnf install -y docker
+mkdir -p /etc/systemd/system/docker.service.d
+cat >/etc/systemd/system/docker.service.d/data-volume.conf <<'UNIT_EOF'
+[Unit]
+RequiresMountsFor=/var/lib/docker
+
+[Service]
+ExecStartPre=/usr/bin/mountpoint -q /var/lib/docker
+UNIT_EOF
+systemctl daemon-reload
 systemctl enable --now docker
 
 COMPOSE_ARCH=$(uname -m)
@@ -43,7 +53,7 @@ curl -fsSL "https://github.com/docker/compose/releases/download/${compose_versio
 chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
 install -d -m 755 /opt/sonarqube /opt/sonarqube/bin
-install -d -m 700 /opt/sonarqube/backups
+install -d -m 700 /var/lib/docker/sonarqube-backups
 
 cat >/opt/sonarqube/docker-compose.yml <<'COMPOSE_EOF'
 ${chomp(compose_file)}
@@ -74,27 +84,19 @@ RENDER_EOF
 chmod +x /opt/sonarqube/bin/render-env.sh
 
 cat >/opt/sonarqube/bin/backup.sh <<'BACKUP_EOF'
-#!/bin/bash
-set -euo pipefail
-cd /opt/sonarqube
-set -a
-source ./.env
-set +a
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-DUMP=/opt/sonarqube/backups/sonar-$TIMESTAMP.dump
-docker compose exec -T db pg_dump -U "$SONAR_DB_USER" -Fc "$SONAR_DB_NAME" >"$DUMP"
-%{ if backup_bucket != "" ~}
-aws s3 cp "$DUMP" "s3://${backup_bucket}/pg_dump/" --only-show-errors
-%{ endif ~}
-find /opt/sonarqube/backups -name '*.dump' -mtime +3 -delete
+${chomp(backup_script)}
 BACKUP_EOF
-chmod +x /opt/sonarqube/bin/backup.sh
+cat >/opt/sonarqube/bin/restore.sh <<'RESTORE_EOF'
+${chomp(restore_script)}
+RESTORE_EOF
+chmod +x /opt/sonarqube/bin/backup.sh /opt/sonarqube/bin/restore.sh
 
 cat >/etc/systemd/system/sonarqube.service <<'UNIT_EOF'
 [Unit]
 Description=SonarQube stack
 Requires=docker.service
 After=docker.service network-online.target
+RequiresMountsFor=/var/lib/docker
 Wants=network-online.target
 
 [Service]
@@ -102,7 +104,7 @@ Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/opt/sonarqube
 ExecStartPre=/opt/sonarqube/bin/render-env.sh
-ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStart=/usr/bin/docker compose up -d --remove-orphans --wait --wait-timeout 600
 ExecStop=/usr/bin/docker compose stop
 TimeoutStartSec=900
 
@@ -113,10 +115,15 @@ UNIT_EOF
 cat >/etc/systemd/system/sonarqube-backup.service <<'UNIT_EOF'
 [Unit]
 Description=SonarQube database backup
+Requires=sonarqube.service
 After=sonarqube.service
+RequiresMountsFor=/var/lib/docker
 
 [Service]
 Type=oneshot
+Environment=BACKUP_DIR=/var/lib/docker/sonarqube-backups
+Environment=BACKUP_S3_BUCKET=${backup_bucket}
+Environment=AWS_DEFAULT_REGION=${region}
 ExecStart=/opt/sonarqube/bin/backup.sh
 UNIT_EOF
 
@@ -134,6 +141,42 @@ WantedBy=timers.target
 UNIT_EOF
 
 %{ if enable_cw_agent ~}
+cat >/opt/sonarqube/bin/health-metrics.sh <<'METRICS_EOF'
+#!/bin/bash
+set -euo pipefail
+HEALTHY=0
+if curl --fail --silent --max-time 20 'https://${domain}/api/system/status' | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then
+  HEALTHY=1
+fi
+BACKUP_HEALTHY=0
+if find /var/lib/docker/sonarqube-backups -maxdepth 1 -name .last-success -mmin -1560 | grep -q .; then
+  BACKUP_HEALTHY=1
+fi
+aws cloudwatch put-metric-data --region ${region} --namespace SonarQube --metric-data \
+  "MetricName=ApplicationHealthy,Dimensions=[{Name=Deployment,Value=${deployment_name}}],Value=$HEALTHY,Unit=Count" \
+  "MetricName=BackupHealthy,Dimensions=[{Name=Deployment,Value=${deployment_name}}],Value=$BACKUP_HEALTHY,Unit=Count"
+METRICS_EOF
+chmod +x /opt/sonarqube/bin/health-metrics.sh
+cat >/etc/systemd/system/sonarqube-health.service <<'UNIT_EOF'
+[Unit]
+Description=Publish SonarQube application and backup health
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/sonarqube/bin/health-metrics.sh
+UNIT_EOF
+cat >/etc/systemd/system/sonarqube-health.timer <<'UNIT_EOF'
+[Unit]
+Description=Check SonarQube health every five minutes
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+UNIT_EOF
 dnf install -y amazon-cloudwatch-agent
 cat >/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CW_EOF'
 {
@@ -164,3 +207,7 @@ CW_EOF
 systemctl daemon-reload
 systemctl enable --now sonarqube.service
 systemctl enable --now sonarqube-backup.timer
+
+%{ if enable_cw_agent ~}
+systemctl enable --now sonarqube-health.timer
+%{ endif ~}

@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- Replace the nonexistent Community image tag with 26.9.0.129388-community and update PostgreSQL/Caddy patch releases; use curl for the SonarQube health check.
+- Require the data mount before Docker starts and wait for container health at initial startup.
+- Store AWS logical backups on the snapshotted volume, avoid sourcing dotenv as shell code, reject concurrent backups and record success only after upload.
+- Restore transactionally, reject invalid dumps before stopping the application and rebuild stale search indexes.
+- Correct GitHub authentication, Community limitations, snapshot recovery and public IPv4 cost documentation.
+
+### Added in Unreleased
+
+- Optional HTTPS application-health and backup-freshness metrics and alarms.
+- S3 backend examples with locking and production state/access preparation instructions.
+- Repository-default-branch scanner example with project-specific configuration checks.
+
 ## [0.1.0] - 2026-07-07
 
 ### Added

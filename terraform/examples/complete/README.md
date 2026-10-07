@@ -5,7 +5,10 @@ Creates a minimal VPC (one public subnet with an internet gateway) and deploys t
 ## Usage
 
 ```bash
-terraform init
+cp backend.tf.example backend.tf
+cp backend.hcl.example backend.hcl
+# Edit backend.hcl with an existing encrypted, versioned state bucket.
+terraform init -backend-config=backend.hcl
 terraform apply \
   -var domain=sonar.example.com \
   -var acme_email=admin@example.com
@@ -14,3 +17,5 @@ terraform apply \
 If your DNS zone is in Route53, pass `-var route53_zone_id=Z123...` and the A record is created for you. Otherwise create an A record for your domain pointing at the `public_ip` output. Caddy issues the TLS certificate automatically once DNS resolves.
 
 First boot takes 5 to 10 minutes (system update, image pulls, SonarQube startup). Then open the `sonarqube_url` output, log in with `admin` / `admin` and change the password immediately.
+
+The S3 backend examples require Terraform >= 1.10 and enable state locking. See [production preparation](../../../README.md#production-preparation) before applying. Enable `enable_cloudwatch_alarms` and set `alarm_actions` for notifications.

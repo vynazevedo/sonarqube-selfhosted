@@ -2,17 +2,41 @@ name: SonarQube analysis
 
 on:
   push:
-    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonarqube-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   sonarqube:
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
+      - name: Check analysis configuration
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          test -n "$SONAR_HOST_URL" || { echo "Missing SONAR_HOST_URL"; exit 1; }
+          test -n "$SONAR_PROJECT_KEY" || { echo "Missing SONAR_PROJECT_KEY"; exit 1; }
+          test -n "$SONAR_TOKEN" || { echo "Missing SONAR_TOKEN"; exit 1; }
+
+      # Generate coverage reports here before scanning.
+      # Maven, Gradle and .NET projects need their dedicated scanner workflow.
       - uses: sonarsource/sonarqube-scan-action@v8
+        with:
+          args: >-
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
         env:
           SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

@@ -29,3 +29,21 @@ variable "route53_zone_id" {
   type        = string
   default     = null
 }
+
+variable "enable_cloudwatch_alarms" {
+  description = "Enable infrastructure, application and backup health alarms"
+  type        = bool
+  default     = false
+}
+
+variable "alarm_actions" {
+  description = "SNS topic ARNs for alarm notifications"
+  type        = list(string)
+  default     = []
+}
+
+variable "data_volume_snapshot_id" {
+  description = "Optional data snapshot to restore (retain the original DB password in SSM/state)"
+  type        = string
+  default     = null
+}

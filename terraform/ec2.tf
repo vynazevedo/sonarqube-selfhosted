@@ -1,4 +1,12 @@
 resource "aws_instance" "this" {
+  depends_on = [
+    aws_iam_role_policy.ssm_read,
+    aws_iam_role_policy.backup,
+    aws_iam_role_policy.health_metrics,
+    aws_iam_role_policy_attachment.ssm_core,
+    aws_iam_role_policy_attachment.cloudwatch_agent,
+  ]
+
   ami                         = nonsensitive(data.aws_ssm_parameter.ami.value)
   instance_type               = var.instance_type
   subnet_id                   = var.subnet_id
@@ -9,7 +17,10 @@ resource "aws_instance" "this" {
 
   user_data = templatefile("${path.module}/templates/user-data.sh.tftpl", {
     compose_file     = file("${path.module}/../docker/docker-compose.yml")
+    backup_script    = file("${path.module}/../scripts/backup.sh")
+    restore_script   = file("${path.module}/../scripts/restore.sh")
     caddyfile        = file("${path.module}/../docker/Caddyfile")
+    deployment_name  = var.name
     region           = data.aws_region.current.region
     ssm_parameter    = aws_ssm_parameter.db_password.name
     domain           = var.domain

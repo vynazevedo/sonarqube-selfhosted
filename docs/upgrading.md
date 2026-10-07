@@ -5,7 +5,7 @@
 Pin an exact patch release and upgrade deliberately:
 
 ```hcl
-sonarqube_image = "sonarqube:2026.1.2-community"
+sonarqube_image = "sonarqube:26.9.0.129388-community"
 ```
 
 Applying replaces the instance (the image tag is part of the rendered user data). The data volume, Elastic IP, database password and backups all survive; expect a few minutes of downtime. SonarQube migrates the database schema on first start after an upgrade; for major version jumps read the SonarSource upgrade notes and always take a manual backup first:
@@ -17,7 +17,7 @@ sudo systemctl start sonarqube-backup.service
 
 Compose-only deployments: change `SONAR_IMAGE` in `.env`, then `docker compose pull && docker compose up -d`.
 
-Never skip an LTA when crossing multiple major versions; upgrade LTA to LTA.
+Community Build uses its own release numbering. Follow the upgrade path for the source and target Community Build versions; do not apply commercial Server LTA naming to Community images.
 
 ## PostgreSQL
 
@@ -37,8 +37,8 @@ Pin a release tag and read the changelog before bumping:
 source = "github.com/vynazevedo/sonarqube-selfhosted//terraform?ref=v1.0.0"
 ```
 
-Breaking changes only happen in major versions. Always run `terraform plan` and check whether the instance will be replaced; replacement is safe for data but causes downtime.
+Breaking changes only happen in major versions. Always run `terraform plan` and check whether the instance will be replaced; replacement retains the separately managed data volume but causes downtime. Back up first and inspect any planned volume replacement.
 
 ## Instance replacement, summarized
 
-These changes replace the EC2 instance: AMI updates (only when you untaint or the module version changes it, the module ignores AMI drift by default), `instance_type`, anything in user data (image tags, domain, extra_env). What survives: data volume (all projects, users, settings, certificates), Elastic IP, SSM parameter, S3 backups, EBS snapshots.
+These changes replace the EC2 instance: explicit instance replacement to adopt a new AMI (AMI drift is ignored by default), anything in user data (image tags, domain, extra_env). What survives: data volume (all projects, users, settings, certificates), Elastic IP, SSM parameter, S3 backups, EBS snapshots.

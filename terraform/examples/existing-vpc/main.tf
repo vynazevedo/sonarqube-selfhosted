@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.5.0"
+  required_version = ">= 1.10.0"
 
   required_providers {
     aws = {
@@ -15,6 +15,10 @@ provider "aws" {
 
 module "sonarqube" {
   source = "../.."
+
+  enable_cloudwatch_alarms = var.enable_cloudwatch_alarms
+  alarm_actions            = var.alarm_actions
+  data_volume_snapshot_id  = var.data_volume_snapshot_id
 
   vpc_id          = var.vpc_id
   subnet_id       = var.subnet_id
